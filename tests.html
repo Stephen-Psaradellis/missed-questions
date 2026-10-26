@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Missed Questions Test</title>
+  <style>
+    body {
+      background: #121212;
+      color: #eee;
+      font-family: monospace, monospace;
+      padding: 1rem;
+    }
+    .test {
+      margin-bottom: 0.7rem;
+    }
+    .pass {
+      color: #4caf50;
+    }
+    .fail {
+      color: #e53935;
+    }
+  </style>
+</head>
+<body>
+  <h1>Missed Questions Tests</h1>
+  <div id="results"></div>
+  <script type="module">
+    import { isQuestion, QuestionBoard } from './questions.js';
+
+    const resultsEl = document.getElementById('results');
+
+    function assert(condition, desc) {
+      const el = document.createElement('div');
+      el.className = 'test';
+      if(condition) {
+        el.textContent = `PASS: ${desc}`;
+        el.classList.add('pass');
+      } else {
+        el.textContent = `FAIL: ${desc}`;
+        el.classList.add('fail');
+      }
+      resultsEl.appendChild(el);
+      return condition;
+    }
+
+    // Tests for isQuestion
+    assert(isQuestion('What game is this?'), '"What game is this?" is question');
+    assert(isQuestion('game name?'), 'Ends with "?" is question (2 words)');
+    assert(!isQuestion('lol?'), 'Short message (1 word) ending with ? rejected');
+    assert(isQuestion('what game?'), 'Short question starting with wh-word accepted');
+    assert(!isQuestion('!whatisthis'), 'Commands starting with ! are not questions');
+    assert(!isQuestion('Hi'), 'Short messages less than 3 chars are not questions');
+    assert(isQuestion('Who is playing'), 'Starts with who is question');
+    assert(isQuestion('@bot are you there?'), 'Mention removed, remaining question kept');
+    assert(!isQuestion('@bot ok?'), 'Mention removed, 1 word question rejected');
+    assert(!isQuestion('Kappa Kappa'), 'Emotes-only line is not question');
+
+    // New tests for mention stripping & long rant rejection
+    const qb = new QuestionBoard();
+    qb.add({user:'mike', text:'@bot What game is this?', ts:100});
+    let last = qb.top(1)[0];
+    assert(last.text === 'What game is this?', 'Mentions stripped from displayed text');
+    const longMsg = 'word '.repeat(26) + '?';
+    assert(!isQuestion(longMsg), 'Reject messages longer than 25 words as rant');
+
+    // Test deduplication and merge logic
+    qb.add({user:'alice', text:'What game is this?', ts:1000});
+    qb.add({user:'bob', text:'what game is this', ts:2000});
+    qb.add({user:'carol', text:'Game name?', ts:3000});
+    let topQs = qb.top();
+    assert(topQs.length === 1, 'Merged duplicates into 1 question');
+    assert(topQs[0].count === 4, 'Distinct user count is 4 (mike, alice, bob, carol)');
+
+    // Test rank order
+    qb.add({user:'dave', text:'Who is the dev?', ts:4000});
+    qb.add({user:'alice', text:'Who is the dev?', ts:5000});
+    topQs = qb.top();
+    assert(topQs[0].text === 'What game is this?', 'Most distinct users top ranked');
+    assert(topQs[1].text === 'Who is the dev?', '2nd ranked by distinct users');
+
+    // Test answered and undo
+    const q0id = topQs[0].id;
+    const q1id = topQs[1].id;
+    qb.markAnswered(q0id);
+    assert(qb.isAnswered(q0id), 'Marked question answered');
+    assert(qb.top().length === 1, 'Top questions decreased after answered');
+    qb.undo(q0id);
+    assert(!qb.isAnswered(q0id), 'Undo answered restores question');
+    assert(qb.top().length === 2, 'Top questions after undo restored');
+  </script>
+</body>
+</html>
